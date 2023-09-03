@@ -12,18 +12,25 @@
 SDL_Window *window = NULL;
 SDL_Renderer *renderer = NULL;
 
-bool grid[GRID_WIDTH][GRID_HEIGHT];
-bool nextGrid[GRID_WIDTH][GRID_HEIGHT];
+enum CellState { EMPTY, FUEL, FIRE };
+
+enum CellState grid[GRID_WIDTH][GRID_HEIGHT];
+enum CellState nextGrid[GRID_WIDTH][GRID_HEIGHT];
 
 bool running = true;
-bool drawing = false;
 
 void initializeGrid() {
     for (int x = 0; x < GRID_WIDTH; x++) {
         for (int y = 0; y < GRID_HEIGHT; y++) {
-            grid[x][y] = false;
+            // Initialize cells randomly as fuel or empty
+            grid[x][y] = (rand() % 2 == 0) ? FUEL : EMPTY;
         }
     }
+
+    // Start the fire at the center
+    int centerX = GRID_WIDTH / 2;
+    int centerY = GRID_HEIGHT / 2;
+    grid[centerX][centerY] = FIRE;
 }
 
 void handleInput() {
@@ -31,22 +38,6 @@ void handleInput() {
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
             running = false;
-        } else if (event.type == SDL_MOUSEBUTTONDOWN) {
-            if (event.button.button == SDL_BUTTON_LEFT) {
-                drawing = true;
-            }
-        } else if (event.type == SDL_MOUSEBUTTONUP) {
-            if (event.button.button == SDL_BUTTON_LEFT) {
-                drawing = false;
-            }
-        } else if (event.type == SDL_MOUSEMOTION) {
-            if (drawing) {
-                int x = event.motion.x / CELL_SIZE;
-                int y = event.motion.y / CELL_SIZE;
-                if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) {
-                    grid[x][y] = true;
-                }
-            }
         }
     }
 }
@@ -54,31 +45,34 @@ void handleInput() {
 void updateGrid() {
     for (int x = 0; x < GRID_WIDTH; x++) {
         for (int y = 0; y < GRID_HEIGHT; y++) {
-            int neighbors = 0;
+            if (grid[x][y] == EMPTY) {
+                // Empty cells remain empty
+                nextGrid[x][y] = EMPTY;
+            } else if (grid[x][y] == FIRE) {
+                // Fire cells turn into empty cells after a certain time step
+                nextGrid[x][y] = EMPTY;
+            } else if (grid[x][y] == FUEL) {
+                // Fuel cells can catch fire if adjacent to a fire cell
+                nextGrid[x][y] = FUEL;
 
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dy = -1; dy <= 1; dy++) {
-                    if (dx == 0 && dy == 0) {
-                        continue;
-                    }
+                // Check neighboring cells for fire
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        int nx = x + dx;
+                        int ny = y + dy;
 
-                    int nx = x + dx;
-                    int ny = y + dy;
-
-                    if (nx >= 0 && nx < GRID_WIDTH && ny >= 0 && ny < GRID_HEIGHT) {
-                        neighbors += grid[nx][ny];
+                        if (nx >= 0 && nx < GRID_WIDTH && ny >= 0 && ny < GRID_HEIGHT &&
+                            grid[nx][ny] == FIRE) {
+                            // Fuel cell catches fire
+                            nextGrid[x][y] = FIRE;
+                        }
                     }
                 }
-            }
-
-            if (grid[x][y]) {
-                nextGrid[x][y] = (neighbors == 2 || neighbors == 3);
-            } else {
-                nextGrid[x][y] = (neighbors == 3);
             }
         }
     }
 
+    // Swap the grids
     for (int x = 0; x < GRID_WIDTH; x++) {
         for (int y = 0; y < GRID_HEIGHT; y++) {
             grid[x][y] = nextGrid[x][y];
@@ -90,13 +84,22 @@ void drawGrid() {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
     SDL_RenderClear(renderer);
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
     for (int x = 0; x < GRID_WIDTH; x++) {
         for (int y = 0; y < GRID_HEIGHT; y++) {
-            if (grid[x][y]) {
-                SDL_Rect cellRect = {x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE};
-                SDL_RenderFillRect(renderer, &cellRect);
+            if (grid[x][y] == FUEL) {
+                // Draw fuel cells as green
+                SDL_SetRenderDrawColor(renderer, 0, 255, 0, SDL_ALPHA_OPAQUE);
+            } else if (grid[x][y] == FIRE) {
+                // Draw fire cells as red
+                SDL_SetRenderDrawColor(renderer, 255, 0, 0, SDL_ALPHA_OPAQUE);
+            } else {
+                // Draw empty cells as black
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
             }
+
+            // Draw cell as a rectangle
+            SDL_Rect cellRect = {x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE};
+            SDL_RenderFillRect(renderer, &cellRect);
         }
     }
 
@@ -111,7 +114,7 @@ int main(int argc, char *argv[]) {
 
     srand(time(NULL));
 
-    window = SDL_CreateWindow("Game of Life", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("Fire Simulation", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
     if (window == NULL) {
         printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
         return 1;
