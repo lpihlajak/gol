@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <time.h>
+#include <pthread.h>
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
@@ -18,19 +19,29 @@ enum CellState grid[GRID_WIDTH][GRID_HEIGHT];
 enum CellState nextGrid[GRID_WIDTH][GRID_HEIGHT];
 
 bool running = true;
+bool addingFuel = false;
+
+pthread_t mouseThread;
+
+// Mutex for controlling access to the addingFuel flag
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void initializeGrid() {
     for (int x = 0; x < GRID_WIDTH; x++) {
         for (int y = 0; y < GRID_HEIGHT; y++) {
-            // Initialize cells randomly as fuel or empty
             grid[x][y] = (rand() % 2 == 0) ? FUEL : EMPTY;
         }
     }
 
-    // Start the fire at the center
     int centerX = GRID_WIDTH / 2;
     int centerY = GRID_HEIGHT / 2;
     grid[centerX][centerY] = FIRE;
+}
+
+void addFuel(int x, int y) {
+    if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) {
+        grid[x][y] = FUEL;
+    }
 }
 
 void handleInput() {
@@ -38,8 +49,35 @@ void handleInput() {
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
             running = false;
+        } else if (event.type == SDL_MOUSEBUTTONDOWN) {
+            if (event.button.button == SDL_BUTTON_LEFT) {
+                pthread_mutex_lock(&mutex);
+                addingFuel = true;
+                pthread_mutex_unlock(&mutex);
+            }
+        } else if (event.type == SDL_MOUSEBUTTONUP) {
+            if (event.button.button == SDL_BUTTON_LEFT) {
+                pthread_mutex_lock(&mutex);
+                addingFuel = false;
+                pthread_mutex_unlock(&mutex);
+            }
         }
     }
+}
+
+void* mouseInputThread(void* arg) {
+    while (running) {
+        pthread_mutex_lock(&mutex);
+        if (addingFuel) {
+            int mouseX, mouseY;
+            SDL_GetMouseState(&mouseX, &mouseY);
+            int gridX = mouseX / CELL_SIZE;
+            int gridY = mouseY / CELL_SIZE;
+            addFuel(gridX, gridY);
+        }
+        pthread_mutex_unlock(&mutex);
+    }
+    return NULL;
 }
 
 void updateGrid() {
@@ -128,12 +166,21 @@ int main(int argc, char *argv[]) {
 
     initializeGrid();
 
+    // Create a thread for mouse input
+    if (pthread_create(&mouseThread, NULL, mouseInputThread, NULL) != 0) {
+        fprintf(stderr, "Error creating mouse input thread\n");
+        return 1;
+    }
+
     while (running) {
         handleInput();
         updateGrid();
         drawGrid();
-        SDL_Delay(100); // Adjust the delay for the desired speed
+        SDL_Delay(100);
     }
+
+    // Wait for the mouse input thread to finish
+    pthread_join(mouseThread, NULL);
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
@@ -141,3 +188,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+

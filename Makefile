@@ -5,7 +5,7 @@ CC = gcc
 CFLAGS = -std=c99 -Wall -Wextra -pedantic -I/usr/include/SDL2
 
 # Linker flags
-LDFLAGS = -lSDL2
+LDFLAGS = -lSDL2 -lpthread
 
 # Source files
 SOURCES = game_of_life.c
