@@ -16,11 +16,12 @@ bool grid[GRID_WIDTH][GRID_HEIGHT];
 bool nextGrid[GRID_WIDTH][GRID_HEIGHT];
 
 bool running = true;
+bool drawing = false;
 
 void initializeGrid() {
     for (int x = 0; x < GRID_WIDTH; x++) {
         for (int y = 0; y < GRID_HEIGHT; y++) {
-            grid[x][y] = rand() % 2;
+            grid[x][y] = false;
         }
     }
 }
@@ -30,6 +31,22 @@ void handleInput() {
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
             running = false;
+        } else if (event.type == SDL_MOUSEBUTTONDOWN) {
+            if (event.button.button == SDL_BUTTON_LEFT) {
+                drawing = true;
+            }
+        } else if (event.type == SDL_MOUSEBUTTONUP) {
+            if (event.button.button == SDL_BUTTON_LEFT) {
+                drawing = false;
+            }
+        } else if (event.type == SDL_MOUSEMOTION) {
+            if (drawing) {
+                int x = event.motion.x / CELL_SIZE;
+                int y = event.motion.y / CELL_SIZE;
+                if (x >= 0 && x < GRID_WIDTH && y >= 0 && y < GRID_HEIGHT) {
+                    grid[x][y] = true;
+                }
+            }
         }
     }
 }
@@ -112,7 +129,7 @@ int main(int argc, char *argv[]) {
         handleInput();
         updateGrid();
         drawGrid();
-//        SDL_Delay(100); // Adjust the delay for the desired speed
+        SDL_Delay(100); // Adjust the delay for the desired speed
     }
 
     SDL_DestroyRenderer(renderer);
